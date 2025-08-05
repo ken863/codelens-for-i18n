@@ -1,0 +1,87 @@
+{
+  "name": "codelens-i18n",
+  "displayName": "CodeLens for i18n",
+  "description": "Samples for VS Code's CodeLens API",
+  "version": "0.0.1",
+  "publisher": "ms-vscode",
+  "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Microsoft/vscode-extension-samples"
+  },
+  "engines": {
+    "vscode": "^1.73.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "*"
+  ],
+  "main": "./out/extension",
+  "contributes": {
+    "commands": [
+      {
+        "title": "Enable Codelens for i18n",
+        "command": "codelens-i18n.enableCodeLens",
+        "category": "CodeLens for i18n"
+      },
+      {
+        "title": "Disable Codelens for i18n",
+        "command": "codelens-i18n.disableCodeLens",
+        "category": "CodeLens for i18n"
+      },
+      {
+        "title": "Setting i18n folder",
+        "command": "codelens-i18n.openI18nFolderSetting",
+        "category": "CodeLens for i18n"
+      },
+      {
+        "title": "Add to i18n folders",
+        "command": "codelens-i18n.addToI18nFolders",
+        "category": "CodeLens for i18n"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "codelens-i18n.addToI18nFolders",
+          "when": "explorerResourceIsFolder",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "properties": {
+        "codelens-i18n.enableCodeLens": {
+          "type": "boolean",
+          "default": true
+        },
+        "codelens-i18n.i18nFolder": {
+          "type": "array",
+          "default": ["i18n"],
+          "description": "Danh sách thư mục chứa các file i18n (tương đối với workspace root).",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "lint": "eslint",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.13.0",
+    "@stylistic/eslint-plugin": "^2.9.0",
+    "@types/node": "^20",
+    "@types/vscode": "^1.102.0",
+    "eslint": "^9.13.0",
+    "typescript": "^5.8.2",
+    "typescript-eslint": "^8.26.0"
+  }
+}
