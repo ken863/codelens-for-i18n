@@ -16,6 +16,32 @@ interface I18nQuickPickItem extends QuickPickItem {
 let disposables: Disposable[] = [];
 
 // Helper functions for i18n data management
+function findJsonFilesRecursive(dir: string): string[] {
+	const jsonFiles: string[] = [];
+	
+	if (!fs.existsSync(dir)) return jsonFiles;
+	
+	try {
+		const items = fs.readdirSync(dir, { withFileTypes: true });
+		
+		for (const item of items) {
+			const fullPath = path.join(dir, item.name);
+			
+			if (item.isDirectory()) {
+				// Duyệt recursive vào thư mục con
+				jsonFiles.push(...findJsonFilesRecursive(fullPath));
+			} else if (item.isFile() && item.name.endsWith('.json')) {
+				// Thêm file .json vào danh sách
+				jsonFiles.push(fullPath);
+			}
+		}
+	} catch (error) {
+		console.warn(`Failed to read directory ${dir}:`, error);
+	}
+	
+	return jsonFiles;
+}
+
 async function loadI18nData(i18nFolders: string[]): Promise<Map<string, any>> {
 	const i18nCache = new Map<string, any>();
 	
@@ -28,14 +54,24 @@ async function loadI18nData(i18nFolders: string[]): Promise<Map<string, any>> {
 			
 			if (!fs.existsSync(folderPath)) continue;
 			
-			const files = fs.readdirSync(folderPath).filter(file => file.endsWith('.json'));
+			// Tìm tất cả file JSON recursive
+			const jsonFiles = findJsonFilesRecursive(folderPath);
 			
-			for (const file of files) {
-				const filePath = path.join(folderPath, file);
+			for (const filePath of jsonFiles) {
 				try {
 					const content = fs.readFileSync(filePath, 'utf8');
 					const jsonData = JSON.parse(content);
-					const locale = path.basename(file, '.json');
+					
+					// Tạo locale key từ đường dẫn tương đối
+					const relativePath = path.relative(folderPath, filePath);
+					let locale = relativePath.replace(/\.json$/, '').replace(/[\/\\]/g, '.');
+					
+					// Nếu file ở root thì dùng tên file, nếu ở subfolder thì dùng path
+					if (!relativePath.includes(path.sep)) {
+						locale = path.basename(filePath, '.json');
+					}
+					
+					console.log(`Loading i18n file: ${filePath} as locale: ${locale}`);
 					i18nCache.set(locale, jsonData);
 				} catch (error) {
 					console.warn(`Failed to load i18n file ${filePath}:`, error);

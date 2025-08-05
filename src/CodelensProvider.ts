@@ -32,7 +32,8 @@ export class CodelensProvider implements vscode.CodeLensProvider {
 
 	constructor() {
 		// Khởi tạo regex để tìm các chuỗi i18n dạng t('key') hoặc t("key") hoặc t(`key`)
-		this.regex = /t\((['"`])((?:\\\1|.)*?)\1\)/g;
+		// Hỗ trợ multiline: t(\n    'key'\n)
+		this.regex = /t\(\s*(['"`])((?:\\\1|[^\\])*?)\1\s*\)/gs;
 		// Đọc setting thư mục i18n
 		this.i18nFolders = vscode.workspace.getConfiguration("codelens-i18n").get<string[]>("i18nFolder", ["i18n"]);
 
@@ -69,10 +70,40 @@ export class CodelensProvider implements vscode.CodeLensProvider {
 	}
 
 	/**
+	 * Duyệt recursive để tìm tất cả file .json trong thư mục
+	 */
+	private findJsonFilesRecursive(dir: string): string[] {
+		const jsonFiles: string[] = [];
+		
+		if (!fs.existsSync(dir)) return jsonFiles;
+		
+		try {
+			const items = fs.readdirSync(dir, { withFileTypes: true });
+			
+			for (const item of items) {
+				const fullPath = path.join(dir, item.name);
+				
+				if (item.isDirectory()) {
+					// Duyệt recursive vào thư mục con
+					jsonFiles.push(...this.findJsonFilesRecursive(fullPath));
+				} else if (item.isFile() && item.name.endsWith('.json')) {
+					// Thêm file .json vào danh sách
+					jsonFiles.push(fullPath);
+				}
+			}
+		} catch (error) {
+			console.warn(`Failed to read directory ${dir}:`, error);
+		}
+		
+		return jsonFiles;
+	}
+
+	/**
 	 * Load dữ liệu i18n từ các file JSON trong các thư mục đã chỉ định
 	 */
 	private async loadI18nData(): Promise<void> {
 		this.i18nCache.clear();
+		this.localeFilePathCache.clear();
 		
 		for (const folder of this.i18nFolders) {
 			try {
@@ -84,17 +115,24 @@ export class CodelensProvider implements vscode.CodeLensProvider {
 				// Kiểm tra nếu thư mục tồn tại
 				if (!fs.existsSync(folderPath)) continue;
 				
-				// Đọc tất cả file JSON trong thư mục
-				const files = fs.readdirSync(folderPath).filter(file => file.endsWith('.json'));
+				// Tìm tất cả file JSON recursive
+				const jsonFiles = this.findJsonFilesRecursive(folderPath);
 				
-				for (const file of files) {
-					const filePath = path.join(folderPath, file);
+				for (const filePath of jsonFiles) {
 					try {
 						const content = fs.readFileSync(filePath, 'utf8');
 						const jsonData = JSON.parse(content);
 						
-						// Sử dụng tên file (không có extension) làm locale key
-						const locale = path.basename(file, '.json');
+						// Tạo locale key từ đường dẫn tương đối
+						const relativePath = path.relative(folderPath, filePath);
+						let locale = relativePath.replace(/\.json$/, '').replace(/[\/\\]/g, '.');
+						
+						// Nếu file ở root thì dùng tên file, nếu ở subfolder thì dùng path
+						if (!relativePath.includes(path.sep)) {
+							locale = path.basename(filePath, '.json');
+						}
+						
+						console.log(`Loading i18n file: ${filePath} as locale: ${locale}`);
 						this.i18nCache.set(locale, jsonData);
 						// Lưu đường dẫn file cho locale này
 						this.localeFilePathCache.set(locale, filePath);
