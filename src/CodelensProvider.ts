@@ -32,8 +32,9 @@ export class CodelensProvider implements vscode.CodeLensProvider {
 
 	constructor() {
 		// Khởi tạo regex để tìm các chuỗi i18n dạng t('key') hoặc t("key") hoặc t(`key`)
-		// Hỗ trợ multiline: t(\n    'key'\n)
-		this.regex = /t\(\s*(['"`])((?:\\\1|[^\\])*?)\1\s*\)/gs;
+		// Chỉ match string đầu tiên, không match parameters
+		// Sử dụng non-greedy match và lookahead để dừng đúng chỗ
+		this.regex = /\bt\(\s*(['"`])([^'"`]*?)\1/gs;
 		// Đọc setting thư mục i18n
 		this.i18nFolders = vscode.workspace.getConfiguration("codelens-i18n").get<string[]>("i18nFolder", ["i18n"]);
 
@@ -193,6 +194,13 @@ export class CodelensProvider implements vscode.CodeLensProvider {
 			
 			// Duyệt qua tất cả các match trong văn bản
 			while ((matches = regex.exec(text)) !== null) {
+				console.log(`Regex match found:`, {
+					fullMatch: matches[0],
+					quote: matches[1],
+					key: matches[2],
+					index: matches.index
+				});
+				
 				// Tạo range cho toàn bộ match (không chỉ một từ)
 				const startPos = document.positionAt(matches.index);
 				const endPos = document.positionAt(matches.index + matches[0].length);

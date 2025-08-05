@@ -1,20 +1,28 @@
 {
   "name": "codelens-i18n",
   "displayName": "CodeLens for i18n",
-  "description": "Samples for VS Code's CodeLens API",
-  "version": "0.0.1",
-  "publisher": "ms-vscode",
-  "private": true,
+  "description": "VS Code extension hỗ trợ tìm kiếm và chỉnh sửa các chuỗi i18n trực tiếp trong code",
+  "version": "1.0.0",
+  "publisher": "lampt-dev",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Microsoft/vscode-extension-samples"
+    "url": "https://github.com/ken863/codelens-for-i18n"
   },
   "engines": {
-    "vscode": "^1.73.0"
+    "vscode": "^1.102.0"
   },
   "categories": [
-    "Other"
+    "Other",
+    "Programming Languages",
+    "Snippets"
+  ],
+  "keywords": [
+    "i18n",
+    "internationalization",
+    "translation",
+    "codelens",
+    "localization"
   ],
   "activationEvents": [
     "*"
