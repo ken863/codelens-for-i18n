@@ -752,8 +752,3 @@ t('error_1')                 // Không mô tả
 - 💬 **Discussions**: GitHub Discussions cho questions & ideas
 - 📢 **Updates**: Watch repository để nhận notifications
 - ⭐ **Star**: Nếu extension hữu ích, đừng quên star repo!
-
----
-
-**Made with ❤️ for the developer community**  
-*Happy coding with i18n! 🌐✨*
