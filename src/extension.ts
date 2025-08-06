@@ -1,21 +1,27 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
+// Module 'vscode' chứa VS Code extensibility API
+// Import module và reference với alias vscode trong code
 import { ExtensionContext, languages, commands, Disposable, workspace, window, Uri, QuickPickItem, Position, Range, Selection, TextEditorRevealType } from 'vscode';
 import { CodelensProvider } from './CodelensProvider';
 import * as fs from 'fs';
 import * as path from 'path';
 
+// Interface cho QuickPick item của i18n
 interface I18nQuickPickItem extends QuickPickItem {
 	locale: string;
 	currentValue?: string;
 }
 
-// this method is called when your extension is activated
-// your extension is activated the very first time the command is executed
+// Phương thức này được gọi khi extension được kích hoạt
+// Extension sẽ được kích hoạt lần đầu tiên khi command được thực thi
 
 let disposables: Disposable[] = [];
 
-// Helper functions for i18n data management
+// Các hàm helper để quản lý dữ liệu i18n
+/**
+ * Tìm tất cả file JSON trong thư mục một cách đệ quy
+ * @param dir Đường dẫn thư mục cần tìm
+ * @returns Mảng các đường dẫn file JSON
+ */
 function findJsonFilesRecursive(dir: string): string[] {
 	const jsonFiles: string[] = [];
 	
@@ -28,7 +34,7 @@ function findJsonFilesRecursive(dir: string): string[] {
 			const fullPath = path.join(dir, item.name);
 			
 			if (item.isDirectory()) {
-				// Duyệt recursive vào thư mục con
+				// Duyệt đệ quy vào thư mục con
 				jsonFiles.push(...findJsonFilesRecursive(fullPath));
 			} else if (item.isFile() && item.name.endsWith('.json')) {
 				// Thêm file .json vào danh sách
@@ -36,12 +42,17 @@ function findJsonFilesRecursive(dir: string): string[] {
 			}
 		}
 	} catch (error) {
-		console.warn(`Failed to read directory ${dir}:`, error);
+		console.warn(`Không thể đọc thư mục ${dir}:`, error);
 	}
 	
 	return jsonFiles;
 }
 
+/**
+ * Load dữ liệu i18n từ các thư mục đã chỉ định
+ * @param i18nFolders Mảng các đường dẫn thư mục i18n
+ * @returns Map chứa dữ liệu i18n với key là locale và value là dữ liệu JSON
+ */
 async function loadI18nData(i18nFolders: string[]): Promise<Map<string, any>> {
 	const i18nCache = new Map<string, any>();
 	
@@ -54,7 +65,7 @@ async function loadI18nData(i18nFolders: string[]): Promise<Map<string, any>> {
 			
 			if (!fs.existsSync(folderPath)) continue;
 			
-			// Tìm tất cả file JSON recursive
+			// Tìm tất cả file JSON đệ quy
 			const jsonFiles = findJsonFilesRecursive(folderPath);
 			
 			for (const filePath of jsonFiles) {
@@ -71,20 +82,25 @@ async function loadI18nData(i18nFolders: string[]): Promise<Map<string, any>> {
 						locale = path.basename(filePath, '.json');
 					}
 					
-					console.log(`Loading i18n file: ${filePath} as locale: ${locale}`);
 					i18nCache.set(locale, jsonData);
 				} catch (error) {
-					console.warn(`Failed to load i18n file ${filePath}:`, error);
+					console.warn(`Không thể load file i18n ${filePath}:`, error);
 				}
 			}
 		} catch (error) {
-			console.warn(`Failed to load i18n folder ${folder}:`, error);
+			console.warn(`Không thể load thư mục i18n ${folder}:`, error);
 		}
 	}
 	
 	return i18nCache;
 }
 
+/**
+ * Lấy giá trị i18n từ key (hỗ trợ nested key với dấu chấm)
+ * @param data Dữ liệu JSON
+ * @param key Key cần lấy giá trị (có thể nested như "common.button.save")
+ * @returns Giá trị string hoặc null nếu không tìm thấy
+ */
 function getI18nValue(data: any, key: string): string | null {
 	const keys = key.split('.');
 	let value = data;
@@ -100,34 +116,34 @@ function getI18nValue(data: any, key: string): string | null {
 	return typeof value === 'string' ? value : null;
 }
 
+/**
+ * Thiết lập giá trị i18n cho key (hỗ trợ nested key với dấu chấm)
+ * @param data Dữ liệu JSON
+ * @param key Key cần thiết lập (có thể nested như "common.button.save")
+ * @param value Giá trị cần thiết lập
+ */
 function setI18nValue(data: any, key: string, value: string): void {
 	const keys = key.split('.');
 	let current = data;
 	
-	console.log(`Setting i18n value - Key: ${key}, Value: ${value}`);
-	console.log(`Keys array:`, keys);
-	
-	// Navigate to the parent object
+	// Điều hướng đến object cha
 	for (let i = 0; i < keys.length - 1; i++) {
 		const k = keys[i];
-		console.log(`Processing key part: ${k}`);
 		if (!(k in current) || typeof current[k] !== 'object' || current[k] === null) {
-			console.log(`Creating new object for key: ${k}`);
 			current[k] = {};
 		}
 		current = current[k];
-		console.log(`Current object after processing ${k}:`, current);
 	}
 	
-	// Set the final value
+	// Thiết lập giá trị cuối cùng
 	const finalKey = keys[keys.length - 1];
-	console.log(`Setting final key: ${finalKey} = ${value}`);
 	current[finalKey] = value;
-	console.log(`Final object:`, JSON.stringify(data, null, 2));
 }
 
 /**
  * Tìm và focus đến vị trí của key trong file JSON
+ * @param filePath Đường dẫn file JSON
+ * @param key Key cần tìm trong JSON
  */
 async function findAndFocusKey(filePath: string, key: string): Promise<void> {
 	try {
@@ -140,7 +156,6 @@ async function findAndFocusKey(filePath: string, key: string): Promise<void> {
 		try {
 			jsonData = JSON.parse(text);
 		} catch (error) {
-			console.error('Failed to parse JSON:', error);
 			// Nếu không parse được JSON, focus đến đầu file
 			const editor = await window.showTextDocument(doc, { preview: false });
 			const position = new Position(0, 0);
@@ -175,7 +190,7 @@ async function findAndFocusKey(filePath: string, key: string): Promise<void> {
 				// Tính độ sâu thụt lề hiện tại
 				const indentLevel = line.length - line.trimStart().length;
 				
-				// Kiểm tra xem có phải là key mình đang tìm không
+				// Kiểm tra xem có phải là key đang tìm không
 				const keyRegex = new RegExp(`^\\s*"${escapeRegExp(keyPart)}"\\s*:`);
 				if (keyRegex.test(line)) {
 					// Kiểm tra độ sâu thụt lề có phù hợp không
@@ -202,7 +217,6 @@ async function findAndFocusKey(filePath: string, key: string): Promise<void> {
 			
 			// Nếu không tìm thấy key part này, dừng tìm kiếm
 			if (!found) {
-				console.log(`Key part '${keyPart}' not found`);
 				break;
 			}
 		}
@@ -231,27 +245,35 @@ async function findAndFocusKey(filePath: string, key: string): Promise<void> {
 			// Di chuyển cursor và highlight dòng
 			editor.selection = new Selection(position, position);
 			editor.revealRange(range, TextEditorRevealType.InCenter);
-			
-			console.log(`Focused to line ${targetLine + 1}, column ${targetColumn + 1} for key: ${key}`);
 		} else {
 			// Nếu không tìm thấy, focus đến đầu file
 			const position = new Position(0, 0);
 			editor.selection = new Selection(position, position);
-			console.log(`Key not found, focused to beginning of file for key: ${key}`);
 		}
 		
 	} catch (error) {
-		console.error('Error focusing to key position:', error);
+		console.error('Lỗi khi focus đến vị trí key:', error);
 	}
 }
 
 /**
- * Escape special regex characters
+ * Escape các ký tự đặc biệt trong regex
+ * @param string Chuỗi cần escape
+ * @returns Chuỗi đã được escape
  */
 function escapeRegExp(string: string): string {
 	return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/**
+ * Lưu giá trị i18n vào file JSON
+ * @param i18nFolders Danh sách thư mục i18n
+ * @param locale Locale cần lưu
+ * @param key Key cần lưu
+ * @param value Giá trị cần lưu
+ * @param targetFilePath Đường dẫn file đích (optional)
+ * @returns Đường dẫn file đã lưu
+ */
 async function saveI18nValue(i18nFolders: string[], locale: string, key: string, value: string, targetFilePath?: string): Promise<string> {
 	try {
 		const workspaceFolders = workspace.workspaceFolders;
@@ -264,7 +286,6 @@ async function saveI18nValue(i18nFolders: string[], locale: string, key: string,
 		// Nếu có targetFilePath thì sử dụng luôn
 		if (targetFilePath && fs.existsSync(targetFilePath)) {
 			finalTargetPath = targetFilePath;
-			console.log(`Using provided target file path: ${finalTargetPath}`);
 		} else {
 			// Tìm thư mục chứa file locale hiện có hoặc sử dụng thư mục đầu tiên
 			let targetFolder = i18nFolders[0] || 'i18n';
@@ -277,7 +298,6 @@ async function saveI18nValue(i18nFolders: string[], locale: string, key: string,
 				if (fs.existsSync(testFilePath)) {
 					targetFolder = folder;
 					finalTargetPath = testFilePath;
-					console.log(`Found existing file in folder: ${folder}`);
 					break;
 				}
 			}
@@ -286,64 +306,52 @@ async function saveI18nValue(i18nFolders: string[], locale: string, key: string,
 			if (!finalTargetPath) {
 				const folderPath = path.join(workspaceFolders[0].uri.fsPath, targetFolder);
 				finalTargetPath = path.join(folderPath, `${locale}.json`);
-				console.log(`Using default folder: ${targetFolder}`);
 			}
 		}
 		
-		console.log(`Saving i18n value to: ${finalTargetPath}`);
-		console.log(`Key: ${key}, Value: ${value}`);
-		
-		// Ensure directory exists
+		// Đảm bảo thư mục tồn tại
 		const folderPath = path.dirname(finalTargetPath);
 		if (!fs.existsSync(folderPath)) {
-			console.log(`Creating directory: ${folderPath}`);
 			fs.mkdirSync(folderPath, { recursive: true });
 		}
 		
-		// Load existing data or create new object
+		// Load dữ liệu hiện có hoặc tạo object mới
 		let data = {};
 		if (fs.existsSync(finalTargetPath)) {
 			try {
 				const content = fs.readFileSync(finalTargetPath, 'utf8');
-				console.log(`Existing file content: ${content}`);
 				data = JSON.parse(content);
 			} catch (error) {
-				console.warn(`Failed to parse existing file ${finalTargetPath}:`, error);
-				data = {}; // Reset to empty object if parse fails
+				console.warn(`Không thể parse file hiện có ${finalTargetPath}:`, error);
+				data = {}; // Reset về object rỗng nếu parse thất bại
 			}
-		} else {
-			console.log(`File does not exist, creating new: ${finalTargetPath}`);
 		}
 		
-		// Set the new value
+		// Thiết lập giá trị mới
 		setI18nValue(data, key, value);
-		console.log(`Data after setting value:`, JSON.stringify(data, null, 2));
 		
-		// Save back to file
+		// Lưu về file
 		const jsonContent = JSON.stringify(data, null, 2);
 		fs.writeFileSync(finalTargetPath, jsonContent, 'utf8');
-		console.log(`Successfully saved to: ${finalTargetPath}`);
 		
-		// Verify file was written
-		if (fs.existsSync(finalTargetPath)) {
-			const verifyContent = fs.readFileSync(finalTargetPath, 'utf8');
-			console.log(`Verified file content: ${verifyContent}`);
-		}
-		
-		return finalTargetPath; // Return the actual file path used
+		return finalTargetPath; // Trả về đường dẫn file đã sử dụng
 	} catch (error) {
-		console.error(`Failed to save i18n value:`, error);
 		const errorMessage = error instanceof Error ? error.message : String(error);
 		window.showErrorMessage(`Lỗi khi lưu file i18n: ${errorMessage}`);
 		throw error;
 	}
 }
 
+// Interface cho QuickPick item của i18n
 interface I18nQuickPickItem extends QuickPickItem {
 	locale: string;
 	currentValue?: string;
 }
 
+/**
+ * Hàm kích hoạt extension
+ * @param _context Context của extension
+ */
 export function activate(_context: ExtensionContext) {
 	const codelensProvider = new CodelensProvider();
 
@@ -351,26 +359,26 @@ export function activate(_context: ExtensionContext) {
 
 	// Đăng ký command để force refresh CodeLens
 	commands.registerCommand("codelens-i18n.refreshCodeLens", () => {
-		// Clear cache trong provider
+		// Xóa cache trong provider
 		codelensProvider.clearCache();
 	});
 
+	// Đăng ký command để bật CodeLens
 	commands.registerCommand("codelens-i18n.enableCodeLens", () => {
 		workspace.getConfiguration("codelens-i18n").update("enableCodeLens", true, true);
 	});
 
+	// Đăng ký command để tắt CodeLens
 	commands.registerCommand("codelens-i18n.disableCodeLens", () => {
 		workspace.getConfiguration("codelens-i18n").update("enableCodeLens", false, true);
 	});
 
+	// Đăng ký command chính để xử lý action của CodeLens
 	commands.registerCommand("codelens-i18n.codelensAction", async (i18nKey: string, translations: string[], localeFilePaths: { [locale: string]: string } = {}) => {
 		if (!i18nKey) {
 			window.showErrorMessage('Không có i18n key được cung cấp');
 			return;
 		}
-
-		console.log(`CodeLens action called - Key: ${i18nKey}`);
-		console.log(`Locale file paths:`, localeFilePaths);
 
 		// Lấy danh sách thư mục i18n từ cấu hình
 		const config = workspace.getConfiguration("codelens-i18n");
@@ -427,6 +435,7 @@ export function activate(_context: ExtensionContext) {
 		
 		quickPick.items = items;
 		
+		// Xử lý khi user chọn một item
 		quickPick.onDidAccept(async () => {
 			const selected = quickPick.selectedItems[0] as I18nQuickPickItem;
 			if (!selected || !selected.locale) return; // Bỏ qua separator
@@ -447,7 +456,7 @@ export function activate(_context: ExtensionContext) {
 					await findAndFocusKey(savedFilePath, i18nKey);
 					
 					window.showInformationMessage(`Đã thêm bản dịch ${selected.locale}: "${newValue}"`);
-					// Trigger refresh CodeLens - thêm delay nhỏ
+					// Trigger refresh CodeLens với delay nhỏ
 					setTimeout(async () => {
 						await commands.executeCommand('codelens-i18n.refreshCodeLens');
 					}, 200);
@@ -468,7 +477,7 @@ export function activate(_context: ExtensionContext) {
 					await findAndFocusKey(savedFilePath, i18nKey);
 					
 					window.showInformationMessage(`Đã cập nhật ${selected.locale}: "${newValue}"`);
-					// Trigger refresh CodeLens - thêm delay nhỏ
+					// Trigger refresh CodeLens với delay nhỏ
 					setTimeout(async () => {
 						await commands.executeCommand('codelens-i18n.refreshCodeLens');
 					}, 200);
@@ -481,7 +490,7 @@ export function activate(_context: ExtensionContext) {
 		quickPick.show();
 	});
 
-	// Đăng ký command mở UI setting cho i18nFolder (nhiều thư mục)
+	// Đăng ký command mở UI setting cho thư mục i18n (hỗ trợ nhiều thư mục)
 	commands.registerCommand("codelens-i18n.openI18nFolderSetting", async () => {
 		const config = workspace.getConfiguration("codelens-i18n");
 		let folders: string[] = config.get<string[]>("i18nFolder", []);
@@ -519,7 +528,7 @@ export function activate(_context: ExtensionContext) {
 		}
 	});
 
-	// Đăng ký command mở UI setting cho displayLanguage
+	// Đăng ký command mở UI setting cho ngôn ngữ hiển thị
 	commands.registerCommand("codelens-i18n.openDisplayLanguageSetting", async () => {
 		const config = workspace.getConfiguration("codelens-i18n");
 		let currentDisplayLanguage: string = config.get<string>("displayLanguage", "ja");
@@ -629,7 +638,9 @@ export function activate(_context: ExtensionContext) {
 	});
 }
 
-// this method is called when your extension is deactivated
+/**
+ * Phương thức này được gọi khi extension bị deactivated
+ */
 export function deactivate() {
 	if (disposables) {
 		disposables.forEach(item => item.dispose());
