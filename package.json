@@ -46,6 +46,11 @@
         "category": "CodeLens for i18n"
       },
       {
+        "title": "Setting display language",
+        "command": "codelens-i18n.openDisplayLanguageSetting",
+        "category": "CodeLens for i18n"
+      },
+      {
         "title": "Add to i18n folders",
         "command": "codelens-i18n.addToI18nFolders",
         "category": "CodeLens for i18n"
@@ -73,6 +78,29 @@
           "items": {
             "type": "string"
           }
+        },
+        "codelens-i18n.displayLanguage": {
+          "type": "string",
+          "default": "ja",
+          "description": "Ngôn ngữ mặc định hiển thị trong CodeLens title.",
+          "enum": [
+            "ja",
+            "en",
+            "vi", 
+            "ko",
+            "zh-cn",
+            "zh-tw",
+            "fr",
+            "de",
+            "es",
+            "it",
+            "pt",
+            "ru",
+            "ar",
+            "th",
+            "id",
+            "ms"
+          ]
         }
       }
     }
