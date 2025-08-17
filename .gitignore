@@ -92,13 +92,6 @@ temp/
 logs
 *.log
 
-# VS Code specific
-.vscode/settings.json
-.vscode/tasks.json
-.vscode/launch.json
-.vscode/extensions.json
-*.vsix
-
 # OS generated files
 .DS_Store
 .DS_Store?
@@ -118,3 +111,7 @@ Thumbs.db
 test-workspace/
 *.test.js
 *.test.ts
+test/backend/i18n/messages/en/message.php
+test/backend/i18n/messages/ja/message.php
+test/frontend/en.json
+test/frontend/ja.json

@@ -1,0 +1,22 @@
+{
+    "typescript.preferences.includePackageJsonAutoImports": "on",
+    "typescript.suggest.autoImports": true,
+    "typescript.updateImportsOnFileMove.enabled": "always",
+    "editor.codeActionsOnSave": {
+        "source.fixAll.eslint": "explicit"
+    },
+    "eslint.validate": [
+        "javascript",
+        "typescript"
+    ],
+    "files.exclude": {
+        "out": false,
+        "node_modules": true,
+        "*.vsix": false
+    },
+    "search.exclude": {
+        "out": true,
+        "node_modules": true,
+        "*.vsix": true
+    }
+}
