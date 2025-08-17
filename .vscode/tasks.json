@@ -27,27 +27,7 @@
                 "clear": false
             },
             "isBackground": true,
-            "problemMatcher": [
-                {
-                    "owner": "typescript",
-                    "source": "ts",
-                    "applyTo": "closedDocuments",
-                    "fileLocation": [
-                        "relative",
-                        "${workspaceRoot}"
-                    ],
-                    "pattern": "$tsc-watch",
-                    "background": {
-                        "activeOnStart": true,
-                        "beginsPattern": {
-                            "regexp": "(\\s+|^)tsc(\\s+|$)"
-                        },
-                        "endsPattern": {
-                            "regexp": "(?:Compilation complete|Found \\d+ errors?)"
-                        }
-                    }
-                }
-            ]
+            "problemMatcher": "$tsc-watch"
         },
         {
             "type": "npm",

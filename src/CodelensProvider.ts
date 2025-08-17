@@ -156,7 +156,6 @@ export class CodelensProvider implements vscode.CodeLensProvider {
               locale = path.basename(filePath, ".json");
             }
 
-            console.log(`Loading i18n file: ${filePath} as locale: ${locale}`);
             this.i18nCache.set(locale, jsonData);
             // Lưu đường dẫn file cho locale này
             this.localeFilePathCache.set(locale, filePath);
@@ -223,13 +222,6 @@ export class CodelensProvider implements vscode.CodeLensProvider {
 
       // Duyệt qua tất cả các match trong văn bản
       while ((matches = regex.exec(text)) !== null) {
-        console.log(`Regex match found:`, {
-          fullMatch: matches[0],
-          quote: matches[1],
-          key: matches[2],
-          index: matches.index,
-        });
-
         // Tạo range cho toàn bộ match (không chỉ một từ)
         const startPos = document.positionAt(matches.index);
         const endPos = document.positionAt(matches.index + matches[0].length);
@@ -300,11 +292,7 @@ export class CodelensProvider implements vscode.CodeLensProvider {
       const priorityLanguages = [
         this.displayLanguage,
         "ja",
-        "en",
-        "vi",
-        "ko",
-        "zh-cn",
-        "zh-tw",
+        "en"
       ];
       // Loại bỏ duplicate
       const uniquePriorityLanguages = [...new Set(priorityLanguages)];

@@ -1,0 +1,15 @@
+{
+  "UNUSED": {
+    "KEY": {
+      "ONE": "This is unused key one",
+      "TWO": "This is unused key two",
+      "THREE": "This is unused key three"
+    }
+  },
+  "COMMON": {
+    "LABELS": {
+      "TITLE": "Title",
+      "DESCRIPTION": "Description" 
+    }
+  }
+}

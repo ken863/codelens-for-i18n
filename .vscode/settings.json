@@ -18,5 +18,10 @@
         "out": true,
         "node_modules": true,
         "*.vsix": true
-    }
+    },
+    "codelens-i18n.enableCodeLens": true,
+    "codelens-i18n.i18nFolder": ["test/frontend"],
+    "codelens-i18n.displayLanguage": "en",
+    "codelens-i18n.excludePatterns": ["**/node_modules/**", "**/.git/**", "**/out/**"],
+    "codelens-i18n.includeFileExtensions": ["ts", "js", "tsx", "jsx", "vue", "html"]
 }

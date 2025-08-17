@@ -227,10 +227,6 @@ i18n/
 ### Ngôn ngữ hiển thị hỗ trợ:
 - `ja` - Japanese (日本語) - **Mặc định**
 - `en` - English
-- `vi` - Tiếng Việt  
-- `ko` - Korean (한국어)
-- `zh-cn` - Chinese Simplified (简体中文)
-- `zh-tw` - Chinese Traditional (繁體中文)
 
 ## 🎯 Code Examples & Patterns
 
@@ -654,10 +650,6 @@ CodeLens: ja: "保存"  # Japanese prioritized
 Tooltip: 
 ├── ja: "保存"
 ├── en: "Save"  
-├── vi: "Lưu"
-├──────────────────
-├── ko: (chưa có bản dịch)
-└── zh-cn: (chưa có bản dịch)
 ```
 
 ### 🎯 **File Focus**

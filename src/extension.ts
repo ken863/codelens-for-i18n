@@ -14,6 +14,10 @@ import {
   Selection,
   TextEditorRevealType,
   env,
+  RelativePattern,
+  ProgressLocation,
+  StatusBarAlignment,
+  StatusBarItem,
 } from "vscode";
 import { CodelensProvider } from "./CodelensProvider";
 import * as fs from "fs";
@@ -29,6 +33,7 @@ interface I18nQuickPickItem extends QuickPickItem {
 // Extension sẽ được kích hoạt lần đầu tiên khi command được thực thi
 
 let disposables: Disposable[] = [];
+let statusBarItem: StatusBarItem | null = null;
 
 // Các hàm helper để quản lý dữ liệu i18n
 /**
@@ -377,86 +382,312 @@ interface I18nQuickPickItem extends QuickPickItem {
 }
 
 /**
+ * Tạo hoặc cập nhật status bar item cho tiến độ tìm kiếm
+ */
+function updateStatusBarProgress(message: string, show: boolean = true): void {
+  if (!statusBarItem) {
+    statusBarItem = window.createStatusBarItem(StatusBarAlignment.Left, 100);
+    statusBarItem.command = undefined; // Không có command
+  }
+
+  if (show) {
+    statusBarItem.text = `$(search) ${message}`;
+    statusBarItem.tooltip = "Đang tìm kiếm i18n resources không sử dụng";
+    statusBarItem.show();
+  } else {
+    statusBarItem.hide();
+  }
+}
+
+/**
  * Tìm tất cả các i18n resource không được sử dụng trong workspace
  */
 async function findUnusedI18nResources(): Promise<void> {
-  try {
-    window.showInformationMessage(
-      "Đang tìm kiếm các i18n resource không được sử dụng...",
-    );
+  return window.withProgress({
+    location: ProgressLocation.Window,
+    title: "🔍 Tìm kiếm i18n resources không sử dụng",
+    cancellable: true
+  }, async (progress, token) => {
+    try {
+      // Hiển thị trong status bar
+      updateStatusBarProgress("Đang khởi tạo...");
+      
+      progress.report({ increment: 0, message: "Đang khởi tạo..." });
 
-    // Lấy cấu hình
-    const config = workspace.getConfiguration("codelens-i18n");
-    const i18nFolders: string[] = config.get<string[]>("i18nFolder", ["i18n"]);
-    const workspaceFolders = workspace.workspaceFolders;
+      // Lấy cấu hình
+      const config = workspace.getConfiguration("codelens-i18n");
+      const i18nFolders: string[] = config.get<string[]>("i18nFolder", ["i18n"]);
+      const excludePatterns: string[] = config.get<string[]>("excludePatterns", [
+        "**/node_modules/**", 
+        "**/.git/**", 
+        "**/dist/**", 
+        "**/build/**",
+        "**/coverage/**",
+        "**/.next/**",
+        "**/.nuxt/**",
+        "**/out/**",
+        "**/public/**",
+        "**/assets/**",
+        "**/.vscode/**",
+        "**/.idea/**",
+        "**/tmp/**",
+        "**/temp/**",
+        "**/*.min.js",
+        "**/*.min.css",
+        "**/vendor/**",
+        "**/lib/**",
+        "**/libs/**"
+      ]);
+      const includeExtensions: string[] = config.get<string[]>("includeFileExtensions", [
+        "ts", "js", "tsx", "jsx"
+      ]);
+      
+      const workspaceFolders = workspace.workspaceFolders;
 
-    if (!workspaceFolders) {
-      window.showErrorMessage("Không có workspace folder nào được mở");
-      return;
-    }
+      if (!workspaceFolders) {
+        window.showErrorMessage("Không có workspace folder nào được mở");
+        return;
+      }
 
-    // Load tất cả i18n keys từ các file JSON
-    const allI18nKeys = new Set<string>();
-    const i18nData = await loadI18nData(i18nFolders);
+      // Check for cancellation
+      if (token.isCancellationRequested) {
+        updateStatusBarProgress("", false); // Hide status bar
+        return;
+      }
 
-    for (const [, data] of i18nData) {
-      const keys = extractAllKeysFromObject(data, "");
-      keys.forEach((key) => allI18nKeys.add(key));
-    }
+      updateStatusBarProgress("Đang kiểm tra workspace...");
+      progress.report({ increment: 10, message: "Đang kiểm tra workspace..." });
 
-    if (allI18nKeys.size === 0) {
-      window.showInformationMessage("Không tìm thấy i18n resource nào");
-      return;
-    }
+      // Sử dụng workspace folder đầu tiên
+      const currentWorkspaceFolder = workspaceFolders[0];
 
-    // Tìm tất cả file code trong workspace (trừ node_modules, .git, etc.)
-    const codeFiles = await workspace.findFiles(
-      "**/*.{ts,js,tsx,jsx,vue,html,php,py,java,cs,cpp,c}",
-      "**/node_modules/**",
-    );
+      // Debug: Kiểm tra xem thư mục i18n có tồn tại không
+      for (const folder of i18nFolders) {
+        const folderPath = path.join(currentWorkspaceFolder.uri.fsPath, folder);
+        if (fs.existsSync(folderPath)) {
+          findJsonFilesRecursive(folderPath);
+        }
+      }
 
-    // Tạo regex để tìm các key được sử dụng (XXXX.YYYY...)
-    const usedKeys = new Set<string>();
-    const keyRegex =
-      /(['"`])([a-zA-Z_$][a-zA-Z0-9_$]*(?:\.[a-zA-Z_$][a-zA-Z0-9_$]*)+)\1/gs;
+      if (token.isCancellationRequested) {
+        updateStatusBarProgress("", false); // Hide status bar
+        return;
+      }
 
-    // Scan từng file để tìm key được sử dụng
-    for (const fileUri of codeFiles) {
-      try {
-        const document = await workspace.openTextDocument(fileUri);
-        const text = document.getText();
-        let matches;
+      updateStatusBarProgress("Đang tải dữ liệu i18n...");
+      progress.report({ increment: 20, message: "Đang tải dữ liệu i18n..." });
 
-        while ((matches = keyRegex.exec(text)) !== null) {
-          const key = matches[2];
-          if (allI18nKeys.has(key)) {
-            usedKeys.add(key);
+      // Load tất cả i18n keys từ các file JSON
+      const allI18nKeys = new Set<string>();
+      const i18nData = await loadI18nData(i18nFolders);
+
+      if (i18nData.size === 0) {
+        window.showWarningMessage(
+          `Không tìm thấy file i18n nào trong các thư mục: ${i18nFolders.join(', ')}. Hãy kiểm tra cấu hình i18nFolder.`
+        );
+        return;
+      }
+
+      if (token.isCancellationRequested) {
+        updateStatusBarProgress("", false); // Hide status bar
+        return;
+      }
+
+      updateStatusBarProgress("Đang trích xuất keys...");
+      progress.report({ increment: 30, message: "Đang trích xuất keys..." });
+
+      for (const [, data] of i18nData) {
+        const keys = extractAllKeysFromObject(data, "");
+        keys.forEach((key) => allI18nKeys.add(key));
+      }
+
+      if (allI18nKeys.size === 0) {
+        window.showInformationMessage("Không tìm thấy i18n resource nào");
+        return;
+      }
+
+      if (token.isCancellationRequested) {
+        updateStatusBarProgress("", false); // Hide status bar
+        return;
+      }
+
+      updateStatusBarProgress("Đang tìm kiếm JS/TS files...");
+      progress.report({ increment: 40, message: "Đang tìm kiếm JS/TS files..." });
+
+      // Tạo pattern cho file extensions - chỉ JavaScript/TypeScript
+      const extensionPattern = `**/*.{${includeExtensions.join(',')}}`;
+      
+      // Tạo exclude pattern - thêm các folder phổ biến được generate tự động
+      const excludePattern = excludePatterns.length > 0 
+        ? `{${excludePatterns.join(',')}}` 
+        : "{**/node_modules/**,**/.git/**,**/dist/**,**/build/**,**/coverage/**,**/.next/**,**/.nuxt/**,**/out/**,**/vendor/**}";
+
+      // Chỉ tìm file trong workspace folder hiện tại
+      const workspacePattern = new RelativePattern(currentWorkspaceFolder, extensionPattern);
+      const workspaceExcludePattern = new RelativePattern(currentWorkspaceFolder, excludePattern);
+      
+      const codeFiles = await workspace.findFiles(workspacePattern, workspaceExcludePattern);
+
+      progress.report({ increment: 50, message: `Đang scan ${codeFiles.length} JS/TS files...` });
+
+      // Tạo regex để tìm các key được sử dụng - chỉ sử dụng pattern đơn giản
+      const usedKeys = new Set<string>();
+      
+      // Pattern duy nhất: Key trong dấu nháy - 'key.name' hoặc "key.name" hoặc `key.name`
+      // Hỗ trợ dấu _ và các ký tự viết hoa trong key name (COMPONENTS.EDITOR_JS_COMPONENT.TOOLS...)
+      const quotedKeyRegex = /(['"`])([A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z0-9_$]+)*)\1/gs;
+
+      // Scan từng file để tìm key được sử dụng
+      let scannedFiles = 0;
+      const totalFiles = codeFiles.length;
+      
+      for (const fileUri of codeFiles) {
+        // Check for cancellation every 5 files
+        if (token.isCancellationRequested) {
+          window.showInformationMessage("Quá trình tìm kiếm đã bị hủy");
+          return;
+        }
+
+        try {
+          // Kiểm tra xem file có thuộc workspace hiện tại không
+          if (!fileUri.fsPath.startsWith(currentWorkspaceFolder.uri.fsPath)) {
+            continue;
+          }
+
+          // Bỏ qua các folder tự động generate - kiểm tra path
+          const relativePath = path.relative(currentWorkspaceFolder.uri.fsPath, fileUri.fsPath);
+          const shouldExclude = [
+            'node_modules',
+            'dist',
+            'build', 
+            'coverage',
+            '.next',
+            '.nuxt', 
+            'out',
+            'public',
+            'assets',
+            '.vscode',
+            '.idea',
+            'tmp',
+            'temp',
+            'vendor',
+            'lib',
+            'libs'
+          ].some(folder => relativePath.includes(`${folder}/`) || relativePath.startsWith(`${folder}/`));
+
+          if (shouldExclude) {
+            continue;
+          }
+
+          // Bỏ qua file nếu có extension không hợp lệ hoặc quá lớn
+          const filePath = fileUri.fsPath;
+          const fileExtension = path.extname(filePath).slice(1);
+          
+          if (!includeExtensions.includes(fileExtension)) {
+            continue;
+          }
+
+          // Kiểm tra size file trước khi đọc (bỏ qua file > 5MB)
+          const stats = await workspace.fs.stat(fileUri);
+          if (stats.size > 5 * 1024 * 1024) {
+            continue;
+          }
+
+          const document = await workspace.openTextDocument(fileUri);
+          const text = document.getText();
+          
+          // Tìm kiếm với pattern đơn giản duy nhất
+          const regexPatterns = [
+            { regex: quotedKeyRegex, captureGroup: 2, name: 'quoted' }      // Key trong dấu nháy
+          ];
+          
+          let fileFoundKeys = 0;
+          for (const pattern of regexPatterns) {
+            let matches;
+            // Reset regex lastIndex để tránh conflict giữa các lần chạy
+            pattern.regex.lastIndex = 0;
+            
+            while ((matches = pattern.regex.exec(text)) !== null) {
+              const key = matches[pattern.captureGroup];
+              if (key && allI18nKeys.has(key)) {
+                usedKeys.add(key);
+                fileFoundKeys++;
+              }
+            }
+          }
+          
+          scannedFiles++;
+          
+          // Update progress every 20 files instead of 10
+          if (scannedFiles % 20 === 0 || scannedFiles === totalFiles) {
+            const progressPercent = Math.floor((scannedFiles / totalFiles) * 30); // 30% of total progress for scanning
+            progress.report({ 
+              increment: 0, 
+              message: `Đã quét ${scannedFiles}/${totalFiles} files... (${progressPercent + 50}%)` 
+            });
+          }
+        } catch (error) {
+          // Bỏ qua lỗi binary file và các lỗi đọc file khác
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          if (errorMessage.includes('binary') || errorMessage.includes('cannot be opened as text')) {
+            // Silent skip for binary files
           }
         }
-      } catch (error) {
-        console.warn(`Không thể đọc file ${fileUri.fsPath}:`, error);
       }
-    }
 
-    // Tìm các key không được sử dụng
-    const unusedKeys = Array.from(allI18nKeys).filter(
-      (key) => !usedKeys.has(key),
-    );
+      updateStatusBarProgress("Đang phân tích kết quả...");
+      progress.report({ increment: 80, message: "Đang phân tích kết quả..." });
 
-    // Hiển thị kết quả
-    if (unusedKeys.length === 0) {
-      window.showInformationMessage(
-        "Tuyệt vời! Tất cả i18n resource đều được sử dụng.",
+      // Tìm các key không được sử dụng
+      const unusedKeys = Array.from(allI18nKeys).filter(
+        (key) => !usedKeys.has(key),
       );
-    } else {
-      await showUnusedResourcesReport(unusedKeys, i18nData);
+
+      if (token.isCancellationRequested) {
+        updateStatusBarProgress("", false); // Hide status bar
+        window.showInformationMessage("Quá trình tìm kiếm đã bị hủy");
+        return;
+      }
+
+      updateStatusBarProgress("Đang tạo và lưu báo cáo...");
+      progress.report({ increment: 90, message: "Đang tạo và lưu báo cáo..." });
+
+      // Hiển thị kết quả
+      if (unusedKeys.length === 0) {
+        window.showInformationMessage(
+          `Tuyệt vời! Tất cả ${allI18nKeys.size} i18n resource đều được sử dụng.`,
+        );
+        
+        // Vẫn tạo file báo cáo cho trường hợp không có unused keys
+        await createEmptyReport(allI18nKeys.size, scannedFiles);
+      } else {
+        await showUnusedResourcesReport(unusedKeys, i18nData, allI18nKeys.size, scannedFiles);
+      }
+
+      progress.report({ increment: 100, message: "Hoàn thành!" });
+      
+      updateStatusBarProgress("", false); // Hide status bar on completion
+      
+      // Show completion notification
+      if (unusedKeys.length === 0) {
+        window.showInformationMessage(`✅ Hoàn thành! Tất cả ${allI18nKeys.size} i18n keys đều được sử dụng.`);
+      } else {
+        window.showInformationMessage(`📊 Hoàn thành! Tìm thấy ${unusedKeys.length}/${allI18nKeys.size} keys không sử dụng.`);
+      }
+    } catch (error) {
+      updateStatusBarProgress("", false); // Hide status bar on error
+      if (token.isCancellationRequested) {
+        window.showInformationMessage("Quá trình tìm kiếm đã bị hủy");
+        return;
+      }
+      
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error("Error in findUnusedI18nResources:", error);
+      window.showErrorMessage(
+        `Lỗi khi tìm kiếm resource không sử dụng: ${errorMessage}`,
+      );
     }
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    window.showErrorMessage(
-      `Lỗi khi tìm kiếm resource không sử dụng: ${errorMessage}`,
-    );
-  }
+  });
 }
 
 /**
@@ -487,72 +718,167 @@ function extractAllKeysFromObject(obj: any, prefix: string = ""): string[] {
 }
 
 /**
- * Hiển thị báo cáo các resource không được sử dụng
+ * Tạo tên file báo cáo unique
  */
-async function showUnusedResourcesReport(
-  unusedKeys: string[],
-  i18nData: Map<string, any>,
-): Promise<void> {
-  // Tạo nội dung báo cáo
-  let reportContent = `# I18n Unused Resources Report\n\n`;
-  reportContent += `Found ${unusedKeys.length} unused i18n resources:\n\n`;
+function generateReportFileName(): string {
+  const now = new Date();
+  const date = now.toISOString().split('T')[0]; // YYYY-MM-DD
+  const time = now.toTimeString().split(' ')[0].replace(/:/g, '-'); // HH-MM-SS
+  return `i18n-unused-resources-${date}-${time}.md`;
+}
 
-  // Nhóm theo locale
-  const keysByLocale = new Map<string, string[]>();
-
-  for (const key of unusedKeys) {
-    for (const [locale, data] of i18nData) {
-      const value = getI18nValue(data, key);
-      if (value) {
-        if (!keysByLocale.has(locale)) {
-          keysByLocale.set(locale, []);
-        }
-        keysByLocale.get(locale)!.push(`- \`${key}\`: "${value}"`);
-      }
+/**
+ * Tạo báo cáo rỗng khi không có unused keys
+ */
+async function createEmptyReport(totalKeys: number, scannedFiles: number): Promise<void> {
+  try {
+    const workspaceFolders = workspace.workspaceFolders;
+    if (!workspaceFolders) {
+      return;
     }
-  }
 
-  // Thêm vào báo cáo theo locale
-  for (const [locale, keys] of keysByLocale) {
-    reportContent += `## ${locale}\n`;
-    reportContent += keys.join("\n") + "\n\n";
-  }
-
-  // Tạo document tạm thời để hiển thị
-  const document = await workspace.openTextDocument({
-    content: reportContent,
-    language: "markdown",
-  });
-
-  await window.showTextDocument(document, { preview: false });
-
-  // Tạo file kết quả trong workspace
-  const workspaceFolders = workspace.workspaceFolders;
-  if (workspaceFolders) {
-    const timestamp = new Date()
-      .toISOString()
-      .replace(/[:.]/g, "-")
-      .split("T")[0];
-    const reportFileName = `i18n-unused-resources-${timestamp}.md`;
+    const reportFileName = generateReportFileName();
     const reportFilePath = path.join(
       workspaceFolders[0].uri.fsPath,
       reportFileName,
     );
 
-    try {
-      fs.writeFileSync(reportFilePath, reportContent, "utf8");
+    let reportContent = `# I18n Unused Resources Report\n\n`;
+    reportContent += `**Scan Date:** ${new Date().toLocaleString()}\n\n`;
+    reportContent += `## Summary\n\n`;
+    reportContent += `- **Total i18n keys:** ${totalKeys}\n`;
+    reportContent += `- **Files scanned:** ${scannedFiles}\n`;
+    reportContent += `- **Unused keys found:** 0\n\n`;
+    reportContent += `🎉 **Result:** All i18n resources are being used!\n\n`;
+    reportContent += `All ${totalKeys} i18n keys in your project are currently being used in the codebase.\n`;
 
+    fs.writeFileSync(reportFilePath, reportContent, "utf8");
+
+    // Kiểm tra file có tồn tại không
+    const fileExists = fs.existsSync(reportFilePath);
+
+    if (fileExists) {
       // Mở file đã lưu
       const savedDocument = await workspace.openTextDocument(
         Uri.file(reportFilePath),
       );
       await window.showTextDocument(savedDocument, { preview: false });
 
-      window.showInformationMessage(`Đã lưu báo cáo tại: ${reportFileName}`);
-    } catch (error) {
-      console.warn("Không thể lưu file báo cáo:", error);
-      // Fallback về document tạm thời nếu không lưu được
+      window.showInformationMessage(`✅ Đã lưu báo cáo tại: ${reportFileName}`);
+    } else {
+      throw new Error("Empty report file was not created successfully");
     }
+  } catch (error) {
+    window.showErrorMessage(`Không thể tạo báo cáo: ${error}`);
+  }
+}
+
+/**
+ * Hiển thị báo cáo các resource không được sử dụng
+ */
+async function showUnusedResourcesReport(
+  unusedKeys: string[],
+  i18nData: Map<string, any>,
+  totalKeys: number,
+  scannedFiles: number,
+): Promise<void> {
+  // Tạo nội dung báo cáo
+  let reportContent = `# I18n Unused Resources Report\n\n`;
+  reportContent += `**Scan Date:** ${new Date().toLocaleString()}\n\n`;
+  
+  // Thêm phần summary
+  reportContent += `## Summary\n\n`;
+  reportContent += `- **Total i18n keys:** ${totalKeys}\n`;
+  reportContent += `- **Files scanned:** ${scannedFiles}\n`;
+  reportContent += `- **Unused keys found:** ${unusedKeys.length}\n`;
+  reportContent += `- **Usage rate:** ${((totalKeys - unusedKeys.length) / totalKeys * 100).toFixed(1)}%\n\n`;
+  
+  if (unusedKeys.length > 0) {
+    reportContent += `## Unused Keys Details\n\n`;
+    reportContent += `Found ${unusedKeys.length} unused i18n resources:\n\n`;
+
+    // Nhóm theo locale
+    const keysByLocale = new Map<string, string[]>();
+
+    for (const key of unusedKeys) {
+      for (const [locale, data] of i18nData) {
+        const value = getI18nValue(data, key);
+        if (value) {
+          if (!keysByLocale.has(locale)) {
+            keysByLocale.set(locale, []);
+          }
+          keysByLocale.get(locale)!.push(`- \`${key}\`: "${value}"`);
+        }
+      }
+    }
+
+    // Thêm vào báo cáo theo locale
+    for (const [locale, keys] of keysByLocale) {
+      reportContent += `### ${locale}\n`;
+      reportContent += keys.join("\n") + "\n\n";
+    }
+    
+    // Thêm phần recommendations
+    reportContent += `## Recommendations\n\n`;
+    reportContent += `1. **Review unused keys:** Check if these keys are actually needed\n`;
+    reportContent += `2. **Safe removal:** Consider removing unused keys to clean up your i18n files\n`;
+    reportContent += `3. **Backup first:** Always backup your i18n files before mass deletion\n\n`;
+    
+    // Thêm danh sách key không có giá trị (chỉ key name)
+    reportContent += `## Raw Unused Keys List\n\n`;
+    reportContent += `\`\`\`\n`;
+    reportContent += unusedKeys.join('\n');
+    reportContent += `\n\`\`\`\n\n`;
+  }
+
+  // Tạo file kết quả trong workspace - LUÔN TẠO FILE
+  const workspaceFolders = workspace.workspaceFolders;
+  let reportFilePath = "";
+  
+  if (workspaceFolders) {
+    const reportFileName = generateReportFileName();
+    reportFilePath = path.join(
+      workspaceFolders[0].uri.fsPath,
+      reportFileName,
+    );
+
+    try {
+      fs.writeFileSync(reportFilePath, reportContent, "utf8");
+      
+      // Kiểm tra file có tồn tại không
+      const fileExists = fs.existsSync(reportFilePath);
+      
+      if (fileExists) {
+        // Mở file đã lưu
+        const savedDocument = await workspace.openTextDocument(
+          Uri.file(reportFilePath),
+        );
+        await window.showTextDocument(savedDocument, { preview: false });
+
+        window.showInformationMessage(`📄 Đã lưu báo cáo tại: ${reportFileName}`);
+      } else {
+        throw new Error("File was not created successfully");
+      }
+    } catch (error) {
+      console.error("Error saving report file:", error);
+      window.showErrorMessage(`Không thể lưu file báo cáo: ${error}`);
+      
+      // Fallback: tạo document tạm thời
+      const document = await workspace.openTextDocument({
+        content: reportContent,
+        language: "markdown",
+      });
+      await window.showTextDocument(document, { preview: false });
+      window.showWarningMessage("Không thể lưu file, hiển thị báo cáo tạm thời");
+    }
+  } else {
+    // Fallback: tạo document tạm thời nếu không có workspace
+    const document = await workspace.openTextDocument({
+      content: reportContent,
+      language: "markdown",
+    });
+    await window.showTextDocument(document, { preview: false });
+    window.showInformationMessage("Hiển thị báo cáo tạm thời");
   }
 
   // Hiển thị quick pick với các tùy chọn
@@ -768,6 +1094,23 @@ export function activate(_context: ExtensionContext) {
         items.push(...itemsWithoutValues);
       }
 
+      // Thêm separator và actions ở cuối
+      if (items.length > 0) {
+        items.push({
+          label: "──────────────────────────────",
+          description: "",
+          locale: "",
+          kind: 14, // QuickPickItemKind.Separator
+        } as any);
+      }
+
+      // Thêm action xóa resource
+      items.push({
+        label: "🗑️ Xóa resource",
+        description: "Xóa resource này khỏi tất cả các file locale",
+        locale: "__DELETE__",
+      } as I18nQuickPickItem);
+
       quickPick.items = items;
 
       // Xử lý khi user chọn một item
@@ -775,6 +1118,14 @@ export function activate(_context: ExtensionContext) {
         const selected = quickPick.selectedItems[0] as I18nQuickPickItem;
         if (!selected || !selected.locale) return; // Bỏ qua separator
 
+        // Xử lý action xóa resource
+        if (selected.locale === "__DELETE__") {
+          quickPick.dispose();
+          await commands.executeCommand("codelens-i18n.deleteResource", i18nKey, localeFilePaths);
+          return;
+        }
+
+        // Xử lý chỉnh sửa locale thông thường
         if (!selected.currentValue) {
           // Tạo bản dịch mới cho locale
           const newValue = await window.showInputBox({
@@ -901,10 +1252,6 @@ export function activate(_context: ExtensionContext) {
       const availableLanguages = [
         { code: "ja", name: "Japanese (日本語)" },
         { code: "en", name: "English" },
-        { code: "vi", name: "Tiếng Việt" },
-        { code: "ko", name: "Korean (한국어)" },
-        { code: "zh-cn", name: "Chinese Simplified (简体中文)" },
-        { code: "zh-tw", name: "Chinese Traditional (繁體中文)" },
       ];
 
       const availableOptions = availableLanguages.map((lang) => ({
@@ -1029,6 +1376,91 @@ export function activate(_context: ExtensionContext) {
         );
       }
     },
+  );
+
+  // Đăng ký command để xóa i18n resource từ CodeLens
+  commands.registerCommand(
+    "codelens-i18n.deleteResource",
+    async (i18nKey: string, localeFilePaths: { [locale: string]: string } = {}) => {
+      if (!i18nKey) {
+        window.showErrorMessage("Không có i18n key được cung cấp");
+        return;
+      }
+
+      // Xác nhận xóa với user
+      const confirm = await window.showWarningMessage(
+        `Bạn có chắc muốn xóa resource "${i18nKey}" khỏi tất cả các file locale? Hành động này không thể hoàn tác.`,
+        { modal: true },
+        "Xóa",
+        "Hủy"
+      );
+
+      if (confirm !== "Xóa") {
+        return;
+      }
+
+      try {
+        // Lấy cấu hình
+        const config = workspace.getConfiguration("codelens-i18n");
+        const i18nFolders: string[] = config.get<string[]>("i18nFolder", ["i18n"]);
+
+        // Load dữ liệu i18n hiện có
+        const i18nData = await loadI18nData(i18nFolders);
+        let deletedCount = 0;
+        const deletedFromLocales: string[] = [];
+
+        // Xóa key từ tất cả các locale
+        for (const [locale, data] of i18nData) {
+          if (deleteI18nKey(data, i18nKey)) {
+            deletedCount++;
+            deletedFromLocales.push(locale);
+
+            // Lưu lại file JSON
+            const workspaceFolders = workspace.workspaceFolders;
+            if (!workspaceFolders) continue;
+
+            // Tìm file tương ứng với locale
+            let targetFilePath = localeFilePaths[locale];
+            
+            // Nếu không có trong cache, tìm trong thư mục
+            if (!targetFilePath) {
+              for (const folder of i18nFolders) {
+                const folderPath = path.join(workspaceFolders[0].uri.fsPath, folder);
+                const testFilePath = path.join(folderPath, `${locale}.json`);
+
+                if (fs.existsSync(testFilePath)) {
+                  targetFilePath = testFilePath;
+                  break;
+                }
+              }
+            }
+
+            if (targetFilePath) {
+              const jsonContent = JSON.stringify(data, null, 2);
+              fs.writeFileSync(targetFilePath, jsonContent, "utf8");
+            }
+          }
+        }
+
+        if (deletedCount > 0) {
+          window.showInformationMessage(
+            `✅ Đã xóa resource "${i18nKey}" từ ${deletedCount} locale: ${deletedFromLocales.join(", ")}`
+          );
+
+          // Refresh CodeLens để cập nhật UI
+          setTimeout(async () => {
+            await commands.executeCommand("codelens-i18n.refreshCodeLens");
+          }, 200);
+        } else {
+          window.showInformationMessage(
+            `Resource "${i18nKey}" không tồn tại trong các file locale`
+          );
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        window.showErrorMessage(`Lỗi khi xóa resource: ${errorMessage}`);
+      }
+    }
   );
 
   // Đăng ký command để tìm các i18n resource không được sử dụng

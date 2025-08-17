@@ -22,7 +22,10 @@
     "internationalization",
     "translation",
     "codelens",
-    "localization"
+    "localization",
+    "unused",
+    "cleanup",
+    "analysis"
   ],
   "activationEvents": [
     "*"
@@ -54,6 +57,18 @@
         "title": "Add to i18n folders",
         "command": "codelens-i18n.addToI18nFolders",
         "category": "CodeLens for i18n"
+      },
+      {
+        "title": "Find unused i18n resources",
+        "command": "codelens-i18n.findUnusedResources",
+        "category": "CodeLens for i18n",
+        "icon": "$(search)"
+      },
+      {
+        "title": "Refresh CodeLens",
+        "command": "codelens-i18n.refreshCodeLens",
+        "category": "CodeLens for i18n",
+        "icon": "$(refresh)"
       }
     ],
     "menus": {
@@ -62,6 +77,38 @@
           "command": "codelens-i18n.addToI18nFolders",
           "when": "explorerResourceIsFolder",
           "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "codelens-i18n.enableCodeLens"
+        },
+        {
+          "command": "codelens-i18n.disableCodeLens"
+        },
+        {
+          "command": "codelens-i18n.openI18nFolderSetting"
+        },
+        {
+          "command": "codelens-i18n.openDisplayLanguageSetting"
+        },
+        {
+          "command": "codelens-i18n.findUnusedResources"
+        },
+        {
+          "command": "codelens-i18n.refreshCodeLens"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "codelens-i18n.findUnusedResources",
+          "when": "resourceExtname == .json",
+          "group": "navigation@1"
+        },
+        {
+          "command": "codelens-i18n.refreshCodeLens",
+          "when": "editorLangId",
+          "group": "navigation@2"
         }
       ]
     },
@@ -85,22 +132,44 @@
           "description": "Ngôn ngữ mặc định hiển thị trong CodeLens title.",
           "enum": [
             "ja",
-            "en",
-            "vi", 
-            "ko",
-            "zh-cn",
-            "zh-tw",
-            "fr",
-            "de",
-            "es",
-            "it",
-            "pt",
-            "ru",
-            "ar",
-            "th",
-            "id",
-            "ms"
+            "en"
           ]
+        },
+        "codelens-i18n.excludePatterns": {
+          "type": "array",
+          "default": [
+            "**/node_modules/**", 
+            "**/.git/**", 
+            "**/dist/**", 
+            "**/build/**",
+            "**/coverage/**",
+            "**/.next/**",
+            "**/.nuxt/**",
+            "**/out/**",
+            "**/public/**",
+            "**/assets/**",
+            "**/.vscode/**",
+            "**/.idea/**",
+            "**/tmp/**",
+            "**/temp/**",
+            "**/*.min.js",
+            "**/*.min.css",
+            "**/vendor/**",
+            "**/lib/**",
+            "**/libs/**"
+          ],
+          "description": "Các pattern file/folder sẽ bị loại trừ khi tìm kiếm unused resources.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "codelens-i18n.includeFileExtensions": {
+          "type": "array",
+          "default": ["ts", "js", "tsx", "jsx", "vue", "html", "php", "py", "java", "cs", "cpp", "c"],
+          "description": "Các extension file sẽ được scan để tìm kiếm i18n keys.",
+          "items": {
+            "type": "string"
+          }
         }
       }
     }
